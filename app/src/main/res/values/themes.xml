@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<style name="Theme.LinuxRmIME" parent="Theme.Material3.DayNight">
+		<item name="android:statusBarColor">?attr/colorSurface</item>
+		<item name="android:windowLightStatusBar">?attr/isLightTheme</item>
+	</style>
+</resources>
