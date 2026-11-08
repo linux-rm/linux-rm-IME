@@ -256,13 +256,14 @@ fun groupedShape(position : Position, full : Dp, small : Dp) : Shape = when (pos
 		gapBelow = gapBelow,
 	) {
 		ListItem(
-			headlineContent = { Text(title) },
+			modifier = Modifier.heightIn(min = minHeight),
 			supportingContent = summary?.let { text -> { Text(text) } },
 			leadingContent = leading,
 			trailingContent = trailing,
 			colors = itemColors,
-			modifier = Modifier.heightIn(min = minHeight),
-		)
+		) {
+			Text(title)
+		}
 	}
 }
 @OptIn(ExperimentalMaterial3Api::class) @Composable fun AppScaffold(title : String, showBack : Boolean = false, onBack : (() -> Unit)? = null, content : @Composable (PaddingValues) -> Unit) {
