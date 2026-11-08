@@ -16,8 +16,8 @@ option(BUILD_SHARED_LIBS "" OFF)
 option(BUILD_TESTING "" OFF)
 
 file(GLOB _b "${CMAKE_CURRENT_SOURCE_DIR}/boost/*")
-if(NOT _b OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/boost/boost/version.hpp")
-    message(FATAL_ERROR "Boost missing. From repo root run:\n  cd app/src/main/jni && rm -rf boost && git clone --depth 1 --recurse-submodules https://github.com/boostorg/boost.git boost")
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/boost/libs/config/include/boost/version.hpp")
+    message(FATAL_ERROR "Boost missing or incomplete. From repo root run:\n  cd app/src/main/jni && rm -rf boost && git clone --depth 1 --recurse-submodules https://github.com/boostorg/boost.git boost")
 endif()
 
 include(Boost)
