@@ -47,6 +47,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
 private val LightColorScheme = lightColorScheme()
 private val DarkColorScheme = darkColorScheme()
 object AppDimens {
@@ -276,7 +278,14 @@ fun groupedShape(position : Position, full : Dp, small : Dp) : Shape = when (pos
 			}
 		})
 	}) { paddingValues ->
-		val modifiedPadding = PaddingValues(start = paddingValues.calculateLeftPadding(layoutDirection), top = paddingValues.calculateTopPadding(), end = paddingValues.calculateRightPadding(layoutDirection), bottom = 0.dp)
-		content(modifiedPadding)
+		val ld = LocalLayoutDirection.current
+		content(
+			PaddingValues(
+				start = paddingValues.calculateStartPadding(ld),
+				top = paddingValues.calculateTopPadding(),
+				end = paddingValues.calculateEndPadding(ld),
+				bottom = 0.dp,
+			)
+		)
 	}
 }

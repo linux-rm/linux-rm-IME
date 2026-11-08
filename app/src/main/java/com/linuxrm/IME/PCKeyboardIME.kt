@@ -65,7 +65,7 @@ private const val LONG_PRESS_THRESHOLD = 300L
 
 class PCKeyboardIME : InputMethodService() {
 	enum class SpecialAction {
-		SETTINGS, Fn, HIDE_KEYBOARD, SYMBOL, PASTE, NUM_TOGGLE, CAPS_TOGGLE, KEYCODE_CANDIDATE, SHOW_MORE
+		SETTINGS, HIDE_KEYBOARD, SYMBOL, PASTE, NUM_TOGGLE, CAPS_TOGGLE, KEYCODE_CANDIDATE, SHOW_MORE
 	}
 
 	data class Key(val label : String, val shLab : String? = null, val kCode : Int = KeyEvent.KEYCODE_UNKNOWN, val width : Float = 1f, val isModifier : Boolean = false, val spAct : SpecialAction? = null) {
@@ -94,7 +94,6 @@ class PCKeyboardIME : InputMethodService() {
 	private var altPressed = false
 	private var capsLock = false
 	private var numActive = false
-	private var fnActive = false
 	private var beforeNumModeIndex = 0
 	private val typeText = 0
 	private val typePassword = 2
@@ -102,6 +101,8 @@ class PCKeyboardIME : InputMethodService() {
 	private var isNumberMode = false
 	private var isPasswordMode = false
 	private var isRawInputMode = false
+	private var showKeyBorders = false
+	private var hapticFeedbackEnabled = false
 	private lateinit var prefs : SharedPreferences
 	private val oldStickyState = mutableMapOf<Int, Boolean>()
 	private val stickyMode = mutableMapOf<Int, Boolean>()
@@ -211,7 +212,7 @@ class PCKeyboardIME : InputMethodService() {
 	}
 
 	private fun imeSendKeyEvent(keyCode : Int, action : Int, metaState : Int) {
-		if (isPasswordMode || numActive || fnActive || currentModeIndex == 0) {
+		if (isPasswordMode || numActive || currentModeIndex == 0) {
 			preEditText.visibility = View.GONE
 			preEditText.clearFocus()
 			(currentInputConnection ?: return).sendKeyEvent(KeyEvent(SystemClock.uptimeMillis(), SystemClock.uptimeMillis(), action, keyCode, 0, metaState, 0, 0, 0, InputDevice.SOURCE_KEYBOARD))
@@ -281,7 +282,7 @@ class PCKeyboardIME : InputMethodService() {
 	}
 
 	private fun imeCommitText(text : String) {
-		if (isPasswordMode || numActive || fnActive || currentModeIndex == 0) {
+		if (isPasswordMode || numActive || currentModeIndex == 0) {
 			preEditText.visibility = View.GONE
 			preEditText.clearFocus()
 			currentInputConnection?.commitText(text, 1)
@@ -408,6 +409,11 @@ class PCKeyboardIME : InputMethodService() {
 			color = Color.argb(160, 255, 255, 255)
 			textAlign = Paint.Align.RIGHT
 		}
+		private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+			color = Color.WHITE
+			style = Paint.Style.STROKE
+			strokeWidth = 1f
+		}
 		private val longPressHandler = Handler(Looper.getMainLooper())
 		private var longPressRunnable : Runnable? = null
 		private var longPressKeyIndex : Int? = null
@@ -425,28 +431,28 @@ class PCKeyboardIME : InputMethodService() {
 			allKeys.clear()
 			currentRowSizes.clear()
 			if (numActive) {
-				allKeys.addAll(listOf(Key("NumLock*", spAct = SpecialAction.NUM_TOGGLE), Key("/", kCode = KeyEvent.KEYCODE_SLASH), Key("*", kCode = KeyEvent.KEYCODE_STAR), Key("-", kCode = KeyEvent.KEYCODE_MINUS), Key("+", kCode = KeyEvent.KEYCODE_PLUS)).also { currentRowSizes.add(it.size) })
+				allKeys.addAll(listOf(Key("/", kCode = KeyEvent.KEYCODE_SLASH), Key("*", kCode = KeyEvent.KEYCODE_STAR), Key("-", kCode = KeyEvent.KEYCODE_MINUS), Key("+", kCode = KeyEvent.KEYCODE_PLUS), Key("Ctrl", kCode = KeyEvent.KEYCODE_CTRL_LEFT, isModifier = true), Key("⇧", kCode = KeyEvent.KEYCODE_SHIFT_LEFT, isModifier = true)).also { currentRowSizes.add(it.size) })
 				allKeys.addAll(listOf(Key("1", kCode = KeyEvent.KEYCODE_1), Key("2", kCode = KeyEvent.KEYCODE_2), Key("3", kCode = KeyEvent.KEYCODE_3), Key("⌫", kCode = KeyEvent.KEYCODE_DEL, width = 0.5f), Key("⌦", kCode = KeyEvent.KEYCODE_FORWARD_DEL, width = 0.5f)).also { currentRowSizes.add(it.size) })
 				allKeys.addAll(listOf(Key("4", kCode = KeyEvent.KEYCODE_4), Key("5", kCode = KeyEvent.KEYCODE_5), Key("6", kCode = KeyEvent.KEYCODE_6), Key("←", kCode = KeyEvent.KEYCODE_DPAD_LEFT, width = 0.5f), Key("→", kCode = KeyEvent.KEYCODE_DPAD_RIGHT, width = 0.5f)).also { currentRowSizes.add(it.size) })
-				allKeys.addAll(listOf(Key("7", kCode = KeyEvent.KEYCODE_7), Key("8", kCode = KeyEvent.KEYCODE_8), Key("9", kCode = KeyEvent.KEYCODE_9), Key("Home", kCode = KeyEvent.KEYCODE_MOVE_HOME, width = 0.5f), Key("End", kCode = KeyEvent.KEYCODE_MOVE_END, width = 0.5f)).also { currentRowSizes.add(it.size) })
+				allKeys.addAll(listOf(Key("7", kCode = KeyEvent.KEYCODE_7), Key("8", kCode = KeyEvent.KEYCODE_8), Key("9", kCode = KeyEvent.KEYCODE_9), Key("↑", kCode = KeyEvent.KEYCODE_DPAD_UP, width = 0.5f), Key("↓", kCode = KeyEvent.KEYCODE_DPAD_DOWN, width = 0.5f)).also { currentRowSizes.add(it.size) })
 				allKeys.addAll(listOf(Key("#", kCode = KeyEvent.KEYCODE_POUND), Key(" ", kCode = KeyEvent.KEYCODE_SPACE), Key("0", kCode = KeyEvent.KEYCODE_0, width = 0.5f), Key(".", kCode = KeyEvent.KEYCODE_PERIOD, width = 0.5f), Key("Enter↵", kCode = KeyEvent.KEYCODE_ENTER, width = 1.5f), Key("*", spAct = SpecialAction.SETTINGS, width = 0.5f)).also { currentRowSizes.add(it.size) })
-				allKeys.addAll(listOf(Key("!?😄", spAct = SpecialAction.SYMBOL), Key("paste", spAct = SpecialAction.PASTE), Key("pgUp", kCode = KeyEvent.KEYCODE_PAGE_UP), Key("pgDn", kCode = KeyEvent.KEYCODE_PAGE_DOWN), Key("⌵", spAct = SpecialAction.HIDE_KEYBOARD)).also { currentRowSizes.add(it.size) })
+				allKeys.addAll(listOf(Key("!?😄", spAct = SpecialAction.SYMBOL), Key("NumLock*", spAct = SpecialAction.NUM_TOGGLE), Key("paste", spAct = SpecialAction.PASTE), Key("Home", kCode = KeyEvent.KEYCODE_MOVE_HOME), Key("pgUp", kCode = KeyEvent.KEYCODE_PAGE_UP), Key("pgDn", kCode = KeyEvent.KEYCODE_PAGE_DOWN), Key("End", kCode = KeyEvent.KEYCODE_MOVE_END), Key("⌵", spAct = SpecialAction.HIDE_KEYBOARD)).also { currentRowSizes.add(it.size) })
 			} else if (isT9Mode()) {
-				allKeys.addAll(listOf(Key("", spAct = SpecialAction.KEYCODE_CANDIDATE, width = 8f), Key("▼", spAct = SpecialAction.SHOW_MORE), Key("123#", spAct = SpecialAction.NUM_TOGGLE)).also { currentRowSizes.add(it.size) })
+				allKeys.addAll(listOf(Key("", spAct = SpecialAction.KEYCODE_CANDIDATE, width = 8f), Key("▼", spAct = SpecialAction.SHOW_MORE), Key("Ctrl", kCode = KeyEvent.KEYCODE_CTRL_LEFT, isModifier = true), Key("⇧", kCode = KeyEvent.KEYCODE_SHIFT_LEFT, isModifier = true)).also { currentRowSizes.add(it.size) })
 				allKeys.addAll(listOf(Key("1'", kCode = KeyEvent.KEYCODE_1), Key("2ABC", kCode = KeyEvent.KEYCODE_2), Key("3DEF", kCode = KeyEvent.KEYCODE_3), Key("⌫", kCode = KeyEvent.KEYCODE_DEL, width = 0.5f), Key("⌦", kCode = KeyEvent.KEYCODE_FORWARD_DEL, width = 0.5f)).also { currentRowSizes.add(it.size) })
 				allKeys.addAll(listOf(Key("4GHI", kCode = KeyEvent.KEYCODE_4), Key("5JKL", kCode = KeyEvent.KEYCODE_5), Key("6MNO", kCode = KeyEvent.KEYCODE_6), Key("←", kCode = KeyEvent.KEYCODE_DPAD_LEFT, width = 0.5f), Key("→", kCode = KeyEvent.KEYCODE_DPAD_RIGHT, width = 0.5f)).also { currentRowSizes.add(it.size) })
-				allKeys.addAll(listOf(Key("7PQRS", kCode = KeyEvent.KEYCODE_7), Key("8TUV", kCode = KeyEvent.KEYCODE_8), Key("9WXYZ", kCode = KeyEvent.KEYCODE_9), Key("Home", kCode = KeyEvent.KEYCODE_MOVE_HOME, width = 0.5f), Key("End", kCode = KeyEvent.KEYCODE_MOVE_END, width = 0.5f)).also { currentRowSizes.add(it.size) })
+				allKeys.addAll(listOf(Key("7PQRS", kCode = KeyEvent.KEYCODE_7), Key("8TUV", kCode = KeyEvent.KEYCODE_8), Key("9WXYZ", kCode = KeyEvent.KEYCODE_9), Key("↑", kCode = KeyEvent.KEYCODE_DPAD_UP, width = 0.5f), Key("↓", kCode = KeyEvent.KEYCODE_DPAD_DOWN, width = 0.5f)).also { currentRowSizes.add(it.size) })
 				allKeys.addAll(listOf(Key("#", kCode = KeyEvent.KEYCODE_POUND), Key(" ", kCode = KeyEvent.KEYCODE_SPACE), Key("0", kCode = KeyEvent.KEYCODE_0, width = 0.5f), Key(".", kCode = KeyEvent.KEYCODE_PERIOD, width = 0.5f), Key("Enter↵", kCode = KeyEvent.KEYCODE_ENTER, width = 1.5f), Key("*", spAct = SpecialAction.SETTINGS, width = 0.5f)).also { currentRowSizes.add(it.size) })
-				allKeys.addAll(listOf(Key("!?😄", spAct = SpecialAction.SYMBOL), Key("paste", spAct = SpecialAction.PASTE), Key("pgUp", kCode = KeyEvent.KEYCODE_PAGE_UP), Key("pgDn", kCode = KeyEvent.KEYCODE_PAGE_DOWN), Key("⌵", spAct = SpecialAction.HIDE_KEYBOARD)).also { currentRowSizes.add(it.size) })
+				allKeys.addAll(listOf(Key("!?😄", spAct = SpecialAction.SYMBOL), Key("123#", spAct = SpecialAction.NUM_TOGGLE), Key("paste", spAct = SpecialAction.PASTE), Key("Home", kCode = KeyEvent.KEYCODE_MOVE_HOME), Key("pgUp", kCode = KeyEvent.KEYCODE_PAGE_UP), Key("pgDn", kCode = KeyEvent.KEYCODE_PAGE_DOWN), Key("End", kCode = KeyEvent.KEYCODE_MOVE_END), Key("⌵", spAct = SpecialAction.HIDE_KEYBOARD)).also { currentRowSizes.add(it.size) })
 			} else {
-				if (fnActive) allKeys.addAll(listOf(Key("Esc", kCode = KeyEvent.KEYCODE_ESCAPE), Key("F1", kCode = KeyEvent.KEYCODE_F1), Key("F2", kCode = KeyEvent.KEYCODE_F2), Key("F3", kCode = KeyEvent.KEYCODE_F3), Key("F4", kCode = KeyEvent.KEYCODE_F4), Key("F5", kCode = KeyEvent.KEYCODE_F5), Key("F6", kCode = KeyEvent.KEYCODE_F6), Key("F7", kCode = KeyEvent.KEYCODE_F7), Key("F8", kCode = KeyEvent.KEYCODE_F8), Key("F9", kCode = KeyEvent.KEYCODE_F9), Key("F10", kCode = KeyEvent.KEYCODE_F10), Key("F11", kCode = KeyEvent.KEYCODE_F11), Key("F12", kCode = KeyEvent.KEYCODE_F12), Key("⌦", kCode = KeyEvent.KEYCODE_FORWARD_DEL, width = 1.5f), Key("123#", spAct = SpecialAction.NUM_TOGGLE)).also { currentRowSizes.add(it.size) })
-				else allKeys.addAll(listOf(Key("", spAct = SpecialAction.KEYCODE_CANDIDATE, width = 8f), Key("▼", spAct = SpecialAction.SHOW_MORE), Key("⌦", kCode = KeyEvent.KEYCODE_FORWARD_DEL), Key("123#", spAct = SpecialAction.NUM_TOGGLE)).also { currentRowSizes.add(it.size) })
+				if (currentModeIndex == 0) allKeys.addAll(listOf(Key("Esc", kCode = KeyEvent.KEYCODE_ESCAPE), Key("F1", kCode = KeyEvent.KEYCODE_F1), Key("F2", kCode = KeyEvent.KEYCODE_F2), Key("F3", kCode = KeyEvent.KEYCODE_F3), Key("F4", kCode = KeyEvent.KEYCODE_F4), Key("F5", kCode = KeyEvent.KEYCODE_F5), Key("F6", kCode = KeyEvent.KEYCODE_F6), Key("F7", kCode = KeyEvent.KEYCODE_F7), Key("F8", kCode = KeyEvent.KEYCODE_F8), Key("F9", kCode = KeyEvent.KEYCODE_F9), Key("F10", kCode = KeyEvent.KEYCODE_F10), Key("F11", kCode = KeyEvent.KEYCODE_F11), Key("F12", kCode = KeyEvent.KEYCODE_F12), Key("⌦", kCode = KeyEvent.KEYCODE_FORWARD_DEL, width = 1.5f)).also { currentRowSizes.add(it.size) })
+				else allKeys.addAll(listOf(Key("", spAct = SpecialAction.KEYCODE_CANDIDATE, width = 8f), Key("▼", spAct = SpecialAction.SHOW_MORE), Key("⌦", kCode = KeyEvent.KEYCODE_FORWARD_DEL)).also { currentRowSizes.add(it.size) })
 				allKeys.addAll(listOf(Key("`", shLab = "~", kCode = KeyEvent.KEYCODE_GRAVE), Key("1", shLab = "!", kCode = KeyEvent.KEYCODE_1), Key("2", shLab = "@", kCode = KeyEvent.KEYCODE_2), Key("3", shLab = "#", kCode = KeyEvent.KEYCODE_3), Key("4", shLab = "$", kCode = KeyEvent.KEYCODE_4), Key("5", shLab = "%", kCode = KeyEvent.KEYCODE_5), Key("6", shLab = "^", kCode = KeyEvent.KEYCODE_6), Key("7", shLab = "&", kCode = KeyEvent.KEYCODE_7), Key("8", shLab = "*", kCode = KeyEvent.KEYCODE_8), Key("9", shLab = "(", kCode = KeyEvent.KEYCODE_9), Key("0", shLab = ")", kCode = KeyEvent.KEYCODE_0), Key("-", shLab = "_", kCode = KeyEvent.KEYCODE_MINUS), Key("=", shLab = "+", kCode = KeyEvent.KEYCODE_EQUALS), Key("⌫", kCode = KeyEvent.KEYCODE_DEL, width = 1.5f)).also { currentRowSizes.add(it.size) })
 				allKeys.addAll(listOf(Key("↹", kCode = KeyEvent.KEYCODE_TAB), Key("q", kCode = KeyEvent.KEYCODE_Q), Key("w", kCode = KeyEvent.KEYCODE_W), Key("e", kCode = KeyEvent.KEYCODE_E), Key("r", kCode = KeyEvent.KEYCODE_R), Key("t", kCode = KeyEvent.KEYCODE_T), Key("y", kCode = KeyEvent.KEYCODE_Y), Key("u", kCode = KeyEvent.KEYCODE_U), Key("i", kCode = KeyEvent.KEYCODE_I), Key("o", kCode = KeyEvent.KEYCODE_O), Key("p", kCode = KeyEvent.KEYCODE_P), Key("[", shLab = "{", kCode = KeyEvent.KEYCODE_LEFT_BRACKET), Key("]", shLab = "}", kCode = KeyEvent.KEYCODE_RIGHT_BRACKET), Key("\\", shLab = "|", kCode = KeyEvent.KEYCODE_BACKSLASH)).also { currentRowSizes.add(it.size) })
 				allKeys.addAll(listOf(Key("⇪Caps", spAct = SpecialAction.CAPS_TOGGLE, width = 1.1f), Key("a", kCode = KeyEvent.KEYCODE_A), Key("s", kCode = KeyEvent.KEYCODE_S), Key("d", kCode = KeyEvent.KEYCODE_D), Key("f", kCode = KeyEvent.KEYCODE_F), Key("g", kCode = KeyEvent.KEYCODE_G), Key("h", kCode = KeyEvent.KEYCODE_H), Key("j", kCode = KeyEvent.KEYCODE_J), Key("k", kCode = KeyEvent.KEYCODE_K), Key("l", kCode = KeyEvent.KEYCODE_L), Key(";", shLab = ":", kCode = KeyEvent.KEYCODE_SEMICOLON), Key("'", shLab = "\"", kCode = KeyEvent.KEYCODE_APOSTROPHE), Key("Enter↵", kCode = KeyEvent.KEYCODE_ENTER, width = 1.5f)).also { currentRowSizes.add(it.size) })
 				allKeys.addAll(listOf(Key("⇧", kCode = KeyEvent.KEYCODE_SHIFT_LEFT, isModifier = true, width = 1.3f), Key("z", kCode = KeyEvent.KEYCODE_Z), Key("x", kCode = KeyEvent.KEYCODE_X), Key("c", kCode = KeyEvent.KEYCODE_C), Key("v", kCode = KeyEvent.KEYCODE_V), Key("b", kCode = KeyEvent.KEYCODE_B), Key("n", kCode = KeyEvent.KEYCODE_N), Key("m", kCode = KeyEvent.KEYCODE_M), Key(",", shLab = "<", kCode = KeyEvent.KEYCODE_COMMA), Key(".", shLab = ">", kCode = KeyEvent.KEYCODE_PERIOD), Key("/", shLab = "?", kCode = KeyEvent.KEYCODE_SLASH), Key("⇧", kCode = KeyEvent.KEYCODE_SHIFT_LEFT, isModifier = true, width = 1.3f)).also { currentRowSizes.add(it.size) })
 				allKeys.addAll(listOf(Key("Ctrl", kCode = KeyEvent.KEYCODE_CTRL_LEFT, isModifier = true), Key("Alt", kCode = KeyEvent.KEYCODE_ALT_LEFT, isModifier = true), Key(" ", kCode = KeyEvent.KEYCODE_SPACE, width = 2.5f), Key("Home", kCode = KeyEvent.KEYCODE_MOVE_HOME), Key("↑", kCode = KeyEvent.KEYCODE_DPAD_UP), Key("End", kCode = KeyEvent.KEYCODE_MOVE_END), Key("pgUp", kCode = KeyEvent.KEYCODE_PAGE_UP), Key("*", spAct = SpecialAction.SETTINGS)).also { currentRowSizes.add(it.size) })
-				allKeys.addAll(listOf(Key("!?😄", spAct = SpecialAction.SYMBOL), Key("Fn", spAct = SpecialAction.Fn), Key("paste", spAct = SpecialAction.PASTE, width = 2.5f), Key("←", kCode = KeyEvent.KEYCODE_DPAD_LEFT), Key("↓", kCode = KeyEvent.KEYCODE_DPAD_DOWN), Key("→", kCode = KeyEvent.KEYCODE_DPAD_RIGHT), Key("pgDn", kCode = KeyEvent.KEYCODE_PAGE_DOWN), Key("⌵", spAct = SpecialAction.HIDE_KEYBOARD)).also { currentRowSizes.add(it.size) })
+				allKeys.addAll(listOf(Key("!?😄", spAct = SpecialAction.SYMBOL), Key("123#", spAct = SpecialAction.NUM_TOGGLE), Key("paste", spAct = SpecialAction.PASTE, width = 2.5f), Key("←", kCode = KeyEvent.KEYCODE_DPAD_LEFT), Key("↓", kCode = KeyEvent.KEYCODE_DPAD_DOWN), Key("→", kCode = KeyEvent.KEYCODE_DPAD_RIGHT), Key("pgDn", kCode = KeyEvent.KEYCODE_PAGE_DOWN), Key("⌵", spAct = SpecialAction.HIDE_KEYBOARD)).also { currentRowSizes.add(it.size) })
 			}
 		}
 
@@ -490,8 +496,11 @@ class PCKeyboardIME : InputMethodService() {
 			super.onDraw(canvas)
 			for ((i, rect) in keyRect.withIndex()) {
 				val key = allKeys[i]
-				if (! fnActive && ! numActive && key.spAct == SpecialAction.KEYCODE_CANDIDATE) {
+				if (! numActive && key.spAct == SpecialAction.KEYCODE_CANDIDATE) {
 					canvas.drawRect(rect, bgPaint)
+					if (showKeyBorders) {
+						canvas.drawRect(rect.left + 0.5f, rect.top + 0.5f, rect.right - 0.5f, rect.bottom - 0.5f, borderPaint)
+					}
 					continue
 				}
 				val bgColor = when {
@@ -505,7 +514,6 @@ class PCKeyboardIME : InputMethodService() {
 					} -> 0xFF0080FF.toInt()
 					key.spAct == SpecialAction.CAPS_TOGGLE && capsLock -> 0xFF0080FF.toInt()
 					key.spAct == SpecialAction.NUM_TOGGLE && numActive -> 0xFF0080FF.toInt()
-					key.spAct == SpecialAction.Fn && fnActive -> 0xFF0080FF.toInt()
 					key.spAct != null -> 0xFF181818.toInt()
 					else -> Color.BLACK
 				}
@@ -529,6 +537,9 @@ class PCKeyboardIME : InputMethodService() {
 						canvas.drawText(key.shLab, rect.right.toFloat() - 4, rect.top.toFloat() + size * 0.5f + 2, shiftHintPaint)
 					}
 				}
+				if (showKeyBorders) {
+					canvas.drawRect(rect.left + 0.5f, rect.top + 0.5f, rect.right - 0.5f, rect.bottom - 0.5f, borderPaint)
+				}
 			}
 		}
 
@@ -551,6 +562,7 @@ class PCKeyboardIME : InputMethodService() {
 					if (keyIndex != - 1) {
 						val key = allKeys[keyIndex]
 						if (key.spAct == SpecialAction.KEYCODE_CANDIDATE) return false
+						if (hapticFeedbackEnabled) performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
 						pointerMap[event.getPointerId(index)] = keyIndex
 						if (key.isModifier) {
 							val keyCode = key.kCode
@@ -709,7 +721,6 @@ class PCKeyboardIME : InputMethodService() {
 			if (key.spAct != null) {
 				return when (key.spAct) {
 					SpecialAction.CAPS_TOGGLE -> if (capsLock) "⬆Caps" else "⇪Caps"
-					SpecialAction.Fn -> if (fnActive) "Fn*" else "Fn"
 					SpecialAction.SETTINGS -> {
 						if (isPasswordMode || isNumberMode) "*"
 						else when (currentModeIndex) {
@@ -992,7 +1003,7 @@ class PCKeyboardIME : InputMethodService() {
 
 	@SuppressLint("NotifyDataSetChanged") private fun updateCandidatePosition() {
 		val rect = keyboardView.candidateRect
-		if (rect != null && ! fnActive && ! numActive && preEditText.isVisible) {
+		if (rect != null && ! numActive && preEditText.isVisible) {
 			candidateRecyclerView.visibility = View.VISIBLE
 			candidateRecyclerView.layoutParams = FrameLayout.LayoutParams(rect.width(), rect.height()).apply {
 				setMargins(rect.left, rect.top, 0, 0)
@@ -1159,7 +1170,6 @@ class PCKeyboardIME : InputMethodService() {
 				when (key.spAct) {
 					SpecialAction.SETTINGS -> {
 						if (isPasswordMode || isNumberMode) return
-						fnActive = false
 						capsLock = false
 						numActive = false
 						currentModeIndex = (currentModeIndex + 1) % 3
@@ -1189,10 +1199,6 @@ class PCKeyboardIME : InputMethodService() {
 						imeSendKeyEvent(KeyEvent.KEYCODE_CAPS_LOCK, KeyEvent.ACTION_DOWN, currentMetaState())
 						imeSendKeyEvent(KeyEvent.KEYCODE_CAPS_LOCK, KeyEvent.ACTION_UP, currentMetaState())
 						keyboardView.invalidate()
-					}
-					SpecialAction.Fn -> {
-						fnActive = ! fnActive
-						rebuildKeyboardAndUpdate(true)
 					}
 					SpecialAction.SHOW_MORE -> showDropdown()
 					SpecialAction.SYMBOL -> {
@@ -1264,6 +1270,8 @@ class PCKeyboardIME : InputMethodService() {
 	}
 
 	override fun onStartInputView(editorInfo : EditorInfo?, restarting : Boolean) {
+		showKeyBorders = prefs.getBoolean("show_key_borders", false)
+		hapticFeedbackEnabled = prefs.getBoolean("haptic_feedback", false)
 		rime.stopImmediately = false
 		clearCandidates()
 		isSymbolProcessorMode = false

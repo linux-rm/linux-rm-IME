@@ -1,0 +1,9 @@
+build/
+debug/
+data/*
+include/*
+lib/*
+bin/*
+share/*
+plugins/*/
+node_modules/

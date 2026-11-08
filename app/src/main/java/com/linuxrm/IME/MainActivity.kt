@@ -1,8 +1,8 @@
 package com.linuxrm.IME
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -40,34 +40,58 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.core.net.toUri
+import androidx.compose.material3.Switch
+import androidx.core.content.edit
+
 class MainActivity : ComponentActivity() {
 	private val imeId by lazy { "$packageName/.PCKeyboardIME" }
 	private var isRedirecting = false
 	private val isSetup = mutableStateOf(false)
 	private val hasStorage = mutableStateOf(false)
+	private val showKeyBorders = mutableStateOf(false)
+	private val hapticFeedback = mutableStateOf(false)
+	private val prefs by lazy { getSharedPreferences("ime_prefs", MODE_PRIVATE) }
 	override fun onCreate(savedInstanceState : Bundle?) {
 		super.onCreate(savedInstanceState)
+		showKeyBorders.value = prefs.getBoolean("show_key_borders", false)
+		hapticFeedback.value = prefs.getBoolean("haptic_feedback", false)
 		setContent {
 			ExampleTheme {
 				MainScreen(
 					isSetup = isSetup.value,
 					hasStorage = hasStorage.value,
+					showKeyBorders = showKeyBorders.value,
+					hapticFeedback = hapticFeedback.value,
 					onStorageClick = { requestStoragePermission() },
 					onSetupClick = { performSetupCheck() },
+					onShowKeyBordersChange = {
+						showKeyBorders.value = it
+						prefs.edit { putBoolean("show_key_borders", it) }
+					},
+					onHapticFeedbackChange = {
+						hapticFeedback.value = it
+						prefs.edit { putBoolean("haptic_feedback", it) }
+					},
 				)
 			}
 		}
 	}
+
 	override fun onResume() {
 		super.onResume()
 		hasStorage.value = hasStoragePermission()
+		showKeyBorders.value = prefs.getBoolean("show_key_borders", false)
+		hapticFeedback.value = prefs.getBoolean("haptic_feedback", false)
 		performSetupCheck()
 	}
+
 	private fun hasStoragePermission() : Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
 		Environment.isExternalStorageManager()
 	} else {
 		checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
 	}
+
 	private fun requestStoragePermission() {
 		if (hasStoragePermission()) {
 			hasStorage.value = true
@@ -76,14 +100,15 @@ class MainActivity : ComponentActivity() {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
 			Toast.makeText(application, "请开启「所有文件访问权限」", Toast.LENGTH_LONG).show()
 			try {
-				startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
-			} catch (e : Exception) {
+				startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, "package:$packageName".toUri()))
+			} catch (_ : Exception) {
 				startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
 			}
 		} else {
 			requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
 		}
 	}
+
 	private fun performSetupCheck() {
 		if (isRedirecting) return
 		val currentIme = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
@@ -114,11 +139,16 @@ class MainActivity : ComponentActivity() {
 		}
 	}
 }
+
 @Composable fun MainScreen(
 	isSetup : Boolean,
 	hasStorage : Boolean,
+	showKeyBorders : Boolean,
+	hapticFeedback : Boolean,
 	onStorageClick : () -> Unit,
 	onSetupClick : () -> Unit,
+	onShowKeyBordersChange : (Boolean) -> Unit,
+	onHapticFeedbackChange : (Boolean) -> Unit,
 ) {
 	var showShortcutDialog by remember { mutableStateOf(false) }
 	AppScaffold(title = "linux-rm IME", showBack = true) { paddingValues ->
@@ -191,8 +221,18 @@ class MainActivity : ComponentActivity() {
 					Text(text = "前端设置", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = AppDimens.titlePaddingTop, bottom = AppDimens.titlePaddingBottom))
 					SpacerGroup()
 					Column {
-						GroupedRow(title = "选项A", position = Position.Top, onClick = {})
-						GroupedRow(title = "选项B", position = Position.Bottom, onClick = { })
+						GroupedRow(
+							title = "显示按键边框",
+							position = Position.Top,
+							trailing = { Switch(checked = showKeyBorders, onCheckedChange = onShowKeyBordersChange) },
+							onClick = { onShowKeyBordersChange(! showKeyBorders) },
+						)
+						GroupedRow(
+							title = "震动反馈",
+							position = Position.Bottom,
+							trailing = { Switch(checked = hapticFeedback, onCheckedChange = onHapticFeedbackChange) },
+							onClick = { onHapticFeedbackChange(! hapticFeedback) },
+						)
 					}
 					SpacerGroup()
 					GroupedRow(title = "切换输入法", position = Position.Alone, onClick = { })
@@ -213,17 +253,21 @@ class MainActivity : ComponentActivity() {
 全选: Ctrl+A
 撤销: Ctrl+Z
 重做: Ctrl+Y 或 Ctrl+Shift+Z, 取决于应用
+===
 光标移动
 Home 跳到行首
 End 跳到行尾
 Ctrl + Home/End 跳到整个文本开头/结尾
 Ctrl + ←/→ 向左右移动一个词
+===
 文本选择
 Shift + ←/→ 逐字符选中
 Shift + Ctrl + ←/→ 逐词选中
 Shift + Home/End 从光标到行首/尾选中
 Shift + Ctrl + Home/End 从光标到全文开头/结尾选中
+===
 删除: Ctrl + Backspace/Delete 删除光标前/后一个词
+===
 提示
 	Tab 键: 大部分情况下不会插入制表符, 而是将焦点移到下一个输入框, 除非使用专门的文本编辑器
 	回车键 Enter 的行为由当前应用决定, 例如聊天框中可能是发送, 备忘录中通常是换行
